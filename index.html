@@ -1,0 +1,215 @@
+
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EAN Vyhledávač</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    input, button { padding: 10px; margin: 5px; }
+    .flag-container { display: flex; gap: 10px; margin-bottom: 15px; }
+    .flag { cursor: pointer; border: 2px solid transparent; border-radius: 5px; }
+    .flag.selected { border-color: #007bff; }
+    .flag img { width: 40px; height: 30px; }
+    .result { margin-top: 20px; padding: 10px; border: 1px solid #ccc; }
+    .fresh { background-color: #d4edda; }
+    .frozen { background-color: #a3d2f2; }
+    .ambient { background-color: #fff3cd; }
+    .label-box {
+      border: 2px solid #333;
+      padding: 15px;
+      margin-top: 15px;
+      background: #fff;
+      font-size: 14px;
+      white-space: pre-wrap;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <div id="languageScreen">
+    <h1>Vyberte jazyk / Choose a language / Оберіть мову</h1>
+    <div class="flag-container">
+      <div class="flag" data-lang="cs" onclick="selectLanguage(this)">
+        <img src="https://flagcdn.com/w40/cz.png" alt="Čeština"><br>CS
+      </div>
+      <div class="flag" data-lang="en" onclick="selectLanguage(this)">
+        <img src="https://flagcdn.com/w40/gb.png" alt="English"><br>EN
+      </div>
+      <div class="flag" data-lang="uk" onclick="selectLanguage(this)">
+        <img src="https://flagcdn.com/w40/ua.png" alt="Українська"><br>UK
+      </div>
+    </div>
+  </div>
+
+  <div id="appScreen" style="display: none;">
+    <h1 id="title">Vyhledávání podle EAN</h1>
+    <input type="text" id="eanInput" placeholder="Zadejte EAN">
+    <button onclick="searchProduct()" id="searchBtn">Vyhledat</button>
+    <div class="result" id="result"></div>
+    <button onclick="goBack()" id="backBtn" style="margin-top: 10px;">Zpět</button>
+    <div class="result" id="linkInfo" style="display:none;"></div>
+  </div>
+
+  <script>
+    let productDatabase = [];
+    let currentLang = 'cs';
+
+    const translations = {
+      cs: {
+        title: "Vyhledávání podle EAN",
+        placeholder: "Zadejte EAN",
+        button: "Vyhledat",
+        name: "Název",
+        type: "Typ",
+        country: "Země",
+        detail: "Zobrazení na štítku",
+        labelsize: "Velikost štítku",
+        notFound: "Produkt nenalezen.",
+        unknown: "Neznámý",
+        unknownCountry: "Neznámá",
+        back: "Zpět",
+        linkcontent: "Obsah z odkazu"
+      },
+      en: {
+        title: "Search by EAN",
+        placeholder: "Enter EAN",
+        button: "Search",
+        name: "Name",
+        type: "Type",
+        country: "Country",
+        detail: "Label Text",
+        labelsize: "Label Size",
+        notFound: "Product not found.",
+        unknown: "Unknown",
+        unknownCountry: "Unknown",
+        back: "Back",
+        linkcontent: "Content from link"
+      },
+      uk: {
+        title: "Пошук за EAN",
+        placeholder: "Введіть EAN",
+        button: "Пошук",
+        name: "Назва",
+        type: "Тип",
+        country: "Країна",
+        detail: "Вміст етикетки",
+        labelsize: "Розмір етикетки",
+        notFound: "Продукт не знайдено.",
+        unknown: "Невідомо",
+        unknownCountry: "Невідома",
+        back: "Назад",
+        linkcontent: "Вміст з посилання"
+      }
+    };
+
+    function selectLanguage(element) {
+      document.querySelectorAll('.flag').forEach(el => el.classList.remove('selected'));
+      element.classList.add('selected');
+      currentLang = element.getAttribute('data-lang');
+      document.getElementById("languageScreen").style.display = "none";
+      document.getElementById("appScreen").style.display = "block";
+      updateTexts();
+    }
+
+    function updateTexts() {
+      const t = translations[currentLang];
+      document.getElementById("title").textContent = t.title;
+      document.getElementById("eanInput").placeholder = t.placeholder;
+      document.getElementById("searchBtn").textContent = t.button;
+      document.getElementById("result").innerHTML = '';
+      document.getElementById("backBtn").textContent = t.back;
+    }
+
+    async function loadData() {
+      const urls = [
+        'https://script.google.com/macros/s/AKfycbygu1z37UGUd38CEtuo4F6beaTQQ47OHaCWpStijBcNay5toS7-faakYvoyD3gy35I2/exec',
+        'https://script.google.com/macros/s/AKfycbz5GZDLvPupqHawa7HsrHQeYtQkyYruZwBu6UJ-wSqh9daBqITbFISBiliw6m2i9KzI/exec'
+      ];
+      try {
+        const responses = await Promise.all(urls.map(url => fetch(url).then(res => res.json())));
+        productDatabase = responses.flat();
+      } catch (error) {
+        console.error('Chyba při načítání dat:', error);
+      }
+    }
+
+    function normalizeEAN(value) {
+      return value ? String(value).replace(/[^\d]/g, '').trim() : '';
+    }
+
+    
+function searchProduct() {
+  const ean = normalizeEAN(document.getElementById('eanInput').value);
+  const resultDiv = document.getElementById('result');
+  const t = translations[currentLang];
+
+  const product = productDatabase.find(p => {
+    const eanKeys = Object.keys(p).filter(k => k.toLowerCase().includes('ean'));
+    return eanKeys.some(key => normalizeEAN(p[key]) === ean);
+  });
+
+  resultDiv.innerHTML = '';
+  resultDiv.className = 'result';
+
+  if (product) {
+    let typeKey = Object.keys(product).find(k => k.toLowerCase().includes('type'));
+    let countryKey = Object.keys(product).find(k => k.toLowerCase().includes('country'));
+
+    let typeClass = '';
+    const type = String(product[typeKey] || '').toLowerCase();
+    if (type === 'fresh') typeClass = 'fresh';
+    else if (type === 'frozen') typeClass = 'frozen';
+    else if (type === 'ambient') typeClass = 'ambient';
+
+    resultDiv.className = `result ${typeClass}`;
+    const labelsize = product["Label size"] || "?";
+
+    let html = `
+      <strong>${t.name}:</strong> ${product.Name || t.unknown}<br>
+      <strong>${t.type}:</strong> ${product[typeKey] || t.unknown}<br>
+      <strong>${t.country}:</strong> ${product[countryKey] || t.unknownCountry}<br>
+      <strong>${t.labelsize}:</strong> ${labelsize}<br>
+      <strong>ID:</strong> ${product.ID || "?"}
+    `;
+
+    const linkKey = Object.keys(product).find(k => k.toLowerCase().includes('link'));
+    const docUrl = product[linkKey] || null;
+
+    if (docUrl && docUrl.includes("docs.google.com")) {
+      const exportUrl = docUrl.replace(/\/edit.*$/, '') + '/export?format=txt';
+
+      fetch(exportUrl)
+        .then(res => res.text())
+        .then(text => {
+          resultDiv.innerHTML = html + `
+            <div class="label-box">${text}</div>
+          `;
+        })
+        .catch(err => {
+          console.error('Chyba při načítání dokumentu:', err);
+          resultDiv.innerHTML = html + `
+            <div class="label-box"><em>${t.linkcontent} nelze načíst.</em></div>
+          `;
+        });
+    } else {
+      resultDiv.innerHTML = html;
+    }
+  } else {
+    resultDiv.className = 'result';
+    resultDiv.innerHTML = t.notFound;
+  }
+}
+
+function goBack() {
+      document.getElementById("appScreen").style.display = "none";
+      document.getElementById("languageScreen").style.display = "block";
+    }
+
+    window.onload = () => {
+      loadData();
+    };
+  </script>
+</body>
+</html>
